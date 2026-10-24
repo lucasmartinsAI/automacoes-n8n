@@ -1,0 +1,717 @@
+{
+  "name": "[LINKEDIN auto] APROVAÇÃO EMAIL",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_ID_DA_PLANILHA",
+          "mode": "list",
+          "cachedResultName": "[LINKEDIN auto] PLANILHA GERAL",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rascunhos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -176,
+        -64
+      ],
+      "id": "d16ec1fc-7e10-4573-ab66-0efadc84232e",
+      "name": "LER PLANILHA",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Sheets (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst candidatos = items.filter(item => {\n  const j = item.json;\n  const temPost = j.post_final && String(j.post_final).trim() !== '';\n  const pendente = j.status === 'pendente';\n  const semDecisao = !j.aprovado_editor || String(j.aprovado_editor).trim() === '';\n  const naoPostado = !j.horario_postado || String(j.horario_postado).trim() === '';\n  return temPost && pendente && semDecisao && naoPostado;\n});\n\nif (candidatos.length === 0) {\n  throw new Error('Nenhum rascunho pronto e aguardando aprovação encontrado na planilha.');\n}\n\nreturn [candidatos[0]];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -64
+      ],
+      "id": "f4c14b19-8af4-40d0-b705-f3e28511d3bf",
+      "name": "SELEÇÃO DE RASCUNHO PARA APROVAÇÃO"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "625d0b03-ebb2-41cb-95a1-6c14bc8e05b8",
+              "leftValue": "={{ $json.data.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        -64
+      ],
+      "id": "7a49658f-4df8-4688-a389-018bb4a6b777",
+      "name": "SE FOR APROVADO"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ID_DO_FLUXO_POSTAGEM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ID_DO_FLUXO_POSTAGEM",
+          "cachedResultName": "[LINKEDIN auto] POSTAGEM"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        -160
+      ],
+      "id": "21c1c18d-a7d3-488a-8281-3531701ed4d9",
+      "name": "Call '[LINKEDIN auto] POSTAGEM'"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_ID_DA_PLANILHA",
+          "mode": "list",
+          "cachedResultName": "[LINKEDIN auto] PLANILHA GERAL",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rascunhos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('SELEÇÃO DE RASCUNHO PARA APROVAÇÃO').item.json.row_number }}",
+            "aprovado_editor": "sim"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "topico",
+              "displayName": "topico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fontes",
+              "displayName": "fontes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_final",
+              "displayName": "post_final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags",
+              "displayName": "hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "checklist",
+              "displayName": "checklist",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ajustes_feitos",
+              "displayName": "ajustes_feitos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "especialidade_editoria",
+              "displayName": "especialidade_editoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fact_check_status",
+              "displayName": "fact_check_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "compliance_status",
+              "displayName": "compliance_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "originalidade_score",
+              "displayName": "originalidade_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tem_cta",
+              "displayName": "tem_cta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "horario_postado",
+              "displayName": "horario_postado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "curtidas",
+              "displayName": "curtidas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comentarios",
+              "displayName": "comentarios",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "compartilhamentos",
+              "displayName": "compartilhamentos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cliente_sintetico_score",
+              "displayName": "cliente_sintetico_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "imagem_url",
+              "displayName": "imagem_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "aprovado_editor",
+              "displayName": "aprovado_editor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        752,
+        -160
+      ],
+      "id": "17a04119-219f-4e13-86a6-fc77362a9894",
+      "name": "Marcar aprovado",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Sheets (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_ID_DA_PLANILHA",
+          "mode": "list",
+          "cachedResultName": "[LINKEDIN auto] PLANILHA GERAL",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rascunhos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('SELEÇÃO DE RASCUNHO PARA APROVAÇÃO').item.json.row_number }}",
+            "aprovado_editor": "nao"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "topico",
+              "displayName": "topico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fontes",
+              "displayName": "fontes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_final",
+              "displayName": "post_final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags",
+              "displayName": "hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "checklist",
+              "displayName": "checklist",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ajustes_feitos",
+              "displayName": "ajustes_feitos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "especialidade_editoria",
+              "displayName": "especialidade_editoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fact_check_status",
+              "displayName": "fact_check_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "compliance_status",
+              "displayName": "compliance_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "originalidade_score",
+              "displayName": "originalidade_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tem_cta",
+              "displayName": "tem_cta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "horario_postado",
+              "displayName": "horario_postado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "curtidas",
+              "displayName": "curtidas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comentarios",
+              "displayName": "comentarios",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "compartilhamentos",
+              "displayName": "compartilhamentos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cliente_sintetico_score",
+              "displayName": "cliente_sintetico_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "imagem_url",
+              "displayName": "imagem_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "aprovado_editor",
+              "displayName": "aprovado_editor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        752,
+        32
+      ],
+      "id": "41bdcf23-7f21-46e4-b382-76c5a905e6b2",
+      "name": "Marcar reprovado",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Sheets (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "seu-email@exemplo.com",
+        "subject": "=Aprovar post: {{ $json.topico }}",
+        "message": "=Tópico: {{ $json.topico }}\n\nPost:\n{{ $json.post_final }}\n\nHashtags:\n{{ $json.hashtags }}\n\nImagem: {{ $json.imagem_url }}",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "APROVADO",
+            "disapproveLabel": "REPROVADO"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        256,
+        -64
+      ],
+      "id": "9e7d19ec-505a-4cb2-bd35-ff846d040622",
+      "name": "ENVIA EMAIL APROVAÇÃO",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CONFIGURAR",
+          "name": "Gmail (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -368,
+        -64
+      ],
+      "id": "4c31c429-2399-4044-80ff-f4cc482cf82e",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "connections": {
+    "LER PLANILHA": {
+      "main": [
+        [
+          {
+            "node": "SELEÇÃO DE RASCUNHO PARA APROVAÇÃO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SELEÇÃO DE RASCUNHO PARA APROVAÇÃO": {
+      "main": [
+        [
+          {
+            "node": "ENVIA EMAIL APROVAÇÃO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SE FOR APROVADO": {
+      "main": [
+        [
+          {
+            "node": "Marcar aprovado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar reprovado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar aprovado": {
+      "main": [
+        [
+          {
+            "node": "Call '[LINKEDIN auto] POSTAGEM'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ENVIA EMAIL APROVAÇÃO": {
+      "main": [
+        [
+          {
+            "node": "SE FOR APROVADO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "LER PLANILHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

@@ -1,0 +1,297 @@
+{
+  "name": "[LINKEDIN auto] Curadoria - Editor de Pauta, Especialista de Editoria",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "topicId"
+            },
+            {
+              "name": "topic"
+            },
+            {
+              "name": "traffic"
+            },
+            {
+              "name": "articles",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2b6868f3-b268-4506-bd3b-bd0c88d45815",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const arts = ($json.articles || []).map(a => `Fonte: ${a.source}\\nURL: ${a.url}\\nConteudo: ${a.text.slice(0, 2500)}`).join('\\n\\n---\\n\\n');\nconst userPrompt = `Topico em alta: ${$json.topic}\\nVolume de busca: ${$json.traffic}\\n\\nArtigos relacionados:\\n\\n${arts}`;\nconst systemPrompt = \"Voce e um editor de conteudo rigoroso, especializado em selecionar pautas para um assessor de investimentos que publica conteudo educativo/analitico no LinkedIn para atrair clientes de alto patrimonio. Voce recebe um topico em alta no Google Trends no Brasil e ate 3 artigos de noticia relacionados a ele, numerados por posicao no array (0, 1, 2). Sua tarefa: (1) avaliar se os artigos realmente tem relacao direta com o topico informado - se forem sobre assunto diferente ou muito generico, a nota deve ser baixa; (2) atribuir uma NOTA de 0 a 100 medindo o quanto esse topico tem substancia financeira/economica/de negocios genuina e potencial de virar um comentario natural (nao forcado) de um assessor de investimentos serio para investidores de alto patrimonio. Use como referencia: 90-100 noticia financeira/economica de primeira linha (resultado de empresa, decisao de politica monetaria, fusao/aquisicao, falencia, indicador economico) - conexao direta, sem forcar nada; 70-89 boa substancia financeira/de negocios, ainda que periferica, exigindo alguma traducao pro leitor; 50-69 relacao financeira fraca ou indireta - arriscado, provavelmente soa forcado; 0-49 sem substancia financeira real. Reduza a nota para no maximo 20 nos seguintes casos, MESMO que tecnicamente seja possivel inventar uma metafora financeira: (a) tragedia em andamento com sofrimento humano ativo - mortes recentes, desastres com vitimas, acidentes graves, crimes violentos, guerra ou conflito com baixas civis - nunca use morte, desastre ou sofrimento como gancho de marca, isso e antietico (newsjacking de tragedia); (b) topico centrado na vida pessoal, privada ou de consumo de uma celebridade ou figura publica - reforma ou compra de imovel, viagem, relacionamento, familia, saude, entrevista sobre tema nao financeiro, fofoca, novela, reality show, polemica de entretenimento, resultado esportivo sem repercussao financeira real - EXCETO se envolver acao financeira ou de negocio genuina da propria celebridade (empresa dela, investimento, falencia, fusao, IPO). Antes de dar uma nota alta, pergunte-se: um assessor de investimentos serio comentaria esse assunto publicamente para atrair clientes de alto patrimonio, ou pareceria forcado/oportunista? Na duvida, de nota mais baixa. (3) analisar cada um dos artigos individualmente e identificar APENAS os que realmente tratam do MESMO fato/acontecimento que justifica o topico - descarte artigos que apenas compartilham uma palavra, pessoa, instituicao ou categoria ampla, mas tratam de acontecimento diferente; retorne em fontes_validas os indices (0, 1 ou 2) apenas dos artigos genuinamente relacionados, do melhor pro pior; se nenhum artigo for realmente relacionado ao fato central, fontes_validas deve ser vazio e a nota deve ser baixa; (4) escrever um resumo objetivo (5 a 8 linhas) do que esta acontecendo, citando os fatos principais e as fontes validas; (5) sugerir um angulo especifico para conectar esse assunto ao universo de um assessor de investimentos atraves da lente de gestao de risco, decisao sob incerteza e disciplina comportamental - o angulo NUNCA pode soar como estar 'aproveitando' um evento triste ou a vida de um famoso, deve ser respeitoso e a conexao deve parecer natural, nunca forcada. NAO cite jogos de azar ou qualquer analogia explicita a jogo - a conexao deve ser feita apenas atraves desses conceitos (risco, incerteza, disciplina, comportamento), nunca citando a origem. Responda SOMENTE em JSON valido, sem markdown, sem crases, no formato exato: {\\\"nota\\\": 0 a 100, \\\"motivo\\\": \\\"...\\\", \\\"resumo\\\": \\\"...\\\", \\\"angulo_sugerido\\\": \\\"...\\\", \\\"fontes_validas\\\": [0,2,1]}\";\nreturn {\n  json: {\n    topicId: $json.topicId,\n    topic: $json.topic,\n    traffic: $json.traffic,\n    articles: $json.articles,\n    requestBody: {\n      model: 'deepseek-chat',\n      temperature: 0.3,\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ]\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        0
+      ],
+      "id": "99f6f208-8319-4431-9afb-f07591389d2c",
+      "name": "04. Editor de Pauta - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        384,
+        0
+      ],
+      "id": "bff11ee5-07d2-435c-8dc7-dfd31d76a0e5",
+      "name": "04. Editor de Pauta - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('04. Editor de Pauta - Montar Prompt').item.json;\nlet content = ($json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content) || '{}';\ncontent = content.trim().replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```$/, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(content); } catch (e) { parsed = { nota: 0, motivo: 'Falha ao interpretar resposta da IA: ' + e.message, resumo: '', angulo_sugerido: '', fontes_validas: [] }; }\n\nconst nota = Number(parsed.nota) || 0;\nconst originalArticles = origin.articles || [];\n\nconst fontesValidasRaw = Array.isArray(parsed.fontes_validas) ? parsed.fontes_validas : [];\nconst fontesValidas = [...new Set(\n  fontesValidasRaw\n    .map(v => Number.parseInt(v, 10))\n    .filter(i => Number.isInteger(i) && i >= 0 && i < originalArticles.length)\n)].slice(0, 3);\n\nconst articlesValidados = fontesValidas.map(i => originalArticles[i]);\n\nreturn {\n  json: {\n    topicId: origin.topicId,\n    topic: origin.topic,\n    traffic: origin.traffic,\n    articles: articlesValidados.length > 0 ? articlesValidados : originalArticles,\n    nota: nota,\n    relevanteFlag: nota >= 70 ? 'sim' : 'nao',\n    motivo_descarte: parsed.motivo || '',\n    resumo: parsed.resumo || '',\n    angulo_sugerido: parsed.angulo_sugerido || ''\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        0
+      ],
+      "id": "51e80187-9b0b-4019-935c-7b6e23c1199a",
+      "name": "04. Editor de Pauta - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "55d514d0-9f94-4871-a665-b7ed596ee13f",
+              "leftValue": "={{ $json.relevanteFlag }}",
+              "rightValue": "sim",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        768,
+        0
+      ],
+      "id": "209a2ad5-10fe-47d7-82b5-5954e46c8759",
+      "name": "04. Editor de Pauta - E Relevant"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const resumo = $json.resumo || '';\nconst topic = $json.topic || '';\nconst anguloSugerido = $json.angulo_sugerido || '';\n\nconst systemPrompt = `Você é um especialista editorial que escolhe a melhor lente analítica para conectar uma notícia a conteúdo de um assessor de investimentos. Escolha UMA das cinco lentes abaixo, a que mais naturalmente se encaixa no tema (evite sempre escolher a mesma, cada tema pede uma lente diferente):\n\n1. \"gestao_de_risco_incerteza\" — baseada na distinção de Frank Knight (1921) entre risco calculável e incerteza não-mensurável. Use quando o tema envolve decisões sob condições imprevisíveis.\n2. \"economia_comportamental\" — baseada em vieses cognitivos (Kahneman, Tversky, Thaler): aversão à perda, excesso de confiança, ancoragem, viés de confirmação. Use quando o tema envolve decisões humanas questionáveis ou padrões de comportamento.\n3. \"geopolitica_macroeconomia\" — Use quando o tema tem repercussão econômica ou política mais ampla.\n4. \"governanca_lideranca\" — Use quando o tema envolve decisão institucional, organizacional ou de liderança sob pressão.\n5. \"planejamento_disciplina_pessoal\" — Use quando o tema se conecta melhor a disciplina, paciência ou planejamento de longo prazo no nível individual.\n\nResponda SOMENTE com um JSON no formato:\n{\"especialidade_editoria\": \"uma das cinco chaves acima\", \"justificativa\": \"explicação curta de por que essa lente encaixa melhor neste tema\"}`;\n\nconst userPrompt = `Tópico: ${topic}\\n\\nResumo dos fatos:\\n${resumo}\\n\\nÂngulo já sugerido anteriormente:\\n${anguloSugerido}`;\n\nreturn {\n  json: {\n    ...$json,\n    requestBody: {\n      model: 'deepseek-chat',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ],\n      temperature: 0.4\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        -96
+      ],
+      "id": "7b4c79e8-c147-439f-8cd8-73b0da3bf5d0",
+      "name": "05. Especialista de Editoria - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1216,
+        -96
+      ],
+      "id": "0133bf05-c456-49ad-b4d3-90cd3cade511",
+      "name": "05. Especialista de Editoria - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('05. Especialista de Editoria - Montar Prompt').item.json;\nconst raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    especialidade_editoria: 'gestao_de_risco_incerteza',\n    justificativa: 'Erro ao interpretar resposta da IA, usando lente padrão: ' + e.message\n  };\n}\n\nreturn {\n  json: {\n    ...origin,\n    especialidade_editoria: parsed.especialidade_editoria,\n    especialidade_justificativa: parsed.justificativa\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        -96
+      ],
+      "id": "951f70ea-e611-4615-bce9-9e060a5b712d",
+      "name": "05. Especialista de Editoria - Parse Resposta"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1616,
+        48
+      ],
+      "id": "9d1e42b0-4e52-499d-993a-b5ca45fe9bb1",
+      "name": "Curadoria - Merge Ramos"
+    }
+  ],
+  "connections": {
+    "04. Editor de Pauta - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "04. Editor de Pauta - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04. Editor de Pauta - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "04. Editor de Pauta - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04. Editor de Pauta - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "04. Editor de Pauta - E Relevant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04. Editor de Pauta - E Relevant": {
+      "main": [
+        [
+          {
+            "node": "05. Especialista de Editoria - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Curadoria - Merge Ramos",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "05. Especialista de Editoria - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "05. Especialista de Editoria - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05. Especialista de Editoria - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "05. Especialista de Editoria - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "04. Editor de Pauta - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05. Especialista de Editoria - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "Curadoria - Merge Ramos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

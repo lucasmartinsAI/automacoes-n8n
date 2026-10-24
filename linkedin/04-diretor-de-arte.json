@@ -1,0 +1,344 @@
+{
+  "name": "[LINKEDIN auto] Diretor de Arte - Geração de Imagem",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "topic"
+            },
+            {
+              "name": "post_final"
+            },
+            {
+              "name": "compliance_status"
+            },
+            {
+              "name": "fact_check_status"
+            },
+            {
+              "name": "hashtags"
+            },
+            {
+              "name": "resumo"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        112
+      ],
+      "id": "e5cc4b6b-852a-43b0-8632-d399cca72f2e",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const topic = $json.topic || '';\nconst resumo = $json.resumo || '';\nconst postFinal = $json.post_final || '';\nconst hashtags = $json.hashtags || '';\n\nconst imagePrompt = `Create a professional editorial image for a LinkedIn post about: \"${topic}\".\n\nBackground facts: ${resumo}\n\nPost narrative/angle: ${postFinal}\n\nSEO keywords: ${hashtags}\n\nInstructions: identify 2 to 3 concrete, literal visual elements directly tied to the real subject of this story (specific objects, setting, symbols related to the actual topic - not generic abstractions like \"growth\" or \"risk\" alone). Combine these concrete elements with a subtle financial/investment visual layer (charts, data overlays, office/analysis elements), balanced, not overpowering the main subject.\n\nIMPORTANT SAFETY RULE: if the topic involves someone's religion, personal faith, health condition, tragedy, or other sensitive personal matters, DO NOT depict religious symbols, faith objects, health-related imagery, or anything tied to that sensitive personal element. In that case, rely only on the financial/investment visual layer (charts, office setting, abstract market elements) and skip illustrating the sensitive part entirely.\n\nStyle: editorial photography or modern corporate illustration. Use specific photographic details: soft directional lighting, shallow depth of field, natural color grading. Avoid generic terms like \"high quality\" or \"minimalist\" - be specific about light, texture, and composition instead.\n\nColor palette: navy blue, gray, white, with a subtle gold accent (brand consistency).\n\nFormat: square (1:1 aspect ratio).\n\nStrict exclusions: no text, no numbers, no logos, no recognizable people, absolutely no references to gambling, casinos, or betting.`;\n\nreturn {\n  json: {\n    ...$json,\n    imagePrompt: imagePrompt\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -16
+      ],
+      "id": "d103c03a-6def-48f2-831e-2f50b8a0f901",
+      "name": "14. Diretor de Arte - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  contents: [{ parts: [{ text: $json.imagePrompt }] }],\n  generationConfig: { responseModalities: [\"IMAGE\"] }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        608,
+        -16
+      ],
+      "id": "083cfe69-8a09-4e4d-839a-09f503010f8e",
+      "name": "14. Diretor de Arte - Gerar Imagem",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "Gemini API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const parts = $json.candidates[0].content.parts;\nconst imagePart = parts.find(p => p.inlineData);\n\nif (!imagePart) {\n  throw new Error('Nenhuma imagem encontrada na resposta do Gemini.');\n}\n\nconst base64Data = imagePart.inlineData.data;\nconst mimeType = imagePart.inlineData.mimeType || 'image/png';\nconst extensao = mimeType.split('/')[1] || 'png';\nconst fileName = `post_${Date.now()}.${extensao}`;\nconst buffer = Buffer.from(base64Data, 'base64');\n\nconst binaryData = await this.helpers.prepareBinaryData(buffer, fileName, mimeType);\n\nreturn {\n  json: {\n    fileName: fileName\n  },\n  binary: {\n    data: binaryData\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -16
+      ],
+      "id": "3fbee250-6e54-44a9-8fc2-20bd3a4f3433",
+      "name": "14. Diretor de Arte - Preparar Binario"
+    },
+    {
+      "parameters": {
+        "name": "=={{ $json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        976,
+        -16
+      ],
+      "id": "4a81ef91-a09b-4bca-bab7-3d80a2bfcf37",
+      "name": "14. Diretor de Arte - Upload Drive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Drive (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "share",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "permissionsUi": {
+          "permissionsValues": {
+            "role": "reader",
+            "type": "anyone"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1184,
+        -16
+      ],
+      "id": "87c67b3d-ea77-4324-a95f-83461222ce01",
+      "name": "14. Diretor de Arte - Compartilhar Imagem",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Drive (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fileId = $('14. Diretor de Arte - Upload Drive').item.json.id;\nconst trigger = $('When Executed by Another Workflow').item.json;\nreturn {\n  json: {\n    ...trigger,\n    imagem_url: `https://drive.google.com/uc?export=view&id=${fileId}`\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        -16
+      ],
+      "id": "66137995-0332-46cb-8e44-e440970ea684",
+      "name": "14. Diretor de Arte - Montar URL"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ffcf8eb2-8268-493f-98fb-97c747571c1f",
+              "leftValue": "={{ $json.compliance_status === 'aprovado' && $json.fact_check_status === 'ok' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        176,
+        112
+      ],
+      "id": "ef19ad6e-40fa-4c0b-b031-c275f40f2cc4",
+      "name": "If"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1600,
+        112
+      ],
+      "id": "74cd62fe-9fc4-47fb-9703-957d4b1be0f5",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    ...$json,\n    imagem_url: $json.imagem_url || ''\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        112
+      ],
+      "id": "122d05a7-560d-4804-beb3-5f14e2f89968",
+      "name": "14. Diretor de Arte - Padronizar Saida"
+    }
+  ],
+  "connections": {
+    "14. Diretor de Arte - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Gerar Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Diretor de Arte - Gerar Imagem": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Preparar Binario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Diretor de Arte - Preparar Binario": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Upload Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Diretor de Arte - Upload Drive": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Compartilhar Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Diretor de Arte - Compartilhar Imagem": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Montar URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "14. Diretor de Arte - Montar URL": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "14. Diretor de Arte - Padronizar Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

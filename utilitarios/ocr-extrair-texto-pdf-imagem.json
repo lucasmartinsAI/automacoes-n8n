@@ -1,0 +1,81 @@
+{
+  "name": "OCR - Extrair Texto de PDF Imagem",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "caminhoPdf"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "91f94d3c-d74c-46cc-b68d-469b94d71a7e",
+      "name": "[OCR][N01] - Trigger Sub-workflow"
+    },
+    {
+      "parameters": {
+        "command": "=pdftoppm -r 200 -png \"{{ $json.caminhoPdf }}\" /tmp/ocr_page\nrm -f /tmp/ocr_all.txt /tmp/ocr_all.tsv\nPAGE=0\nfor f in $(ls /tmp/ocr_page-*.png | sort -V); do\n  PAGE=$((PAGE+1))\n  tesseract \"$f\" - -l por 2>/dev/null >> /tmp/ocr_all.txt\n  echo \"###PAGINA:$PAGE###\" >> /tmp/ocr_all.tsv\n  tesseract \"$f\" - -l por tsv 2>/dev/null >> /tmp/ocr_all.tsv\ndone\nrm -f /tmp/ocr_page-*.png\ncat /tmp/ocr_all.txt\necho \"###TSV_SEPARADOR###\"\ncat /tmp/ocr_all.tsv"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "d8002231-fc4f-40ab-ab44-25f5c2681670",
+      "name": "[OCR][N02] - Converter e Ler Texto"
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $json.stdout;\nconst partes = stdout.split('###TSV_SEPARADOR###');\nconst texto = partes[0] || '';\nconst tsv = partes[1] || '';\nconst caminhoPdf = $('[OCR][N01] - Trigger Sub-workflow').item.json.caminhoPdf;\nreturn [{ json: { texto: texto, tsv: tsv, caminhoPdf: caminhoPdf } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "aaed07c7-d30c-4cd3-b58c-2366cd077601",
+      "name": "[OCR][N03] - Retornar Resultado"
+    }
+  ],
+  "connections": {
+    "[OCR][N01] - Trigger Sub-workflow": {
+      "main": [
+        [
+          {
+            "node": "[OCR][N02] - Converter e Ler Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[OCR][N02] - Converter e Ler Texto": {
+      "main": [
+        [
+          {
+            "node": "[OCR][N03] - Retornar Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

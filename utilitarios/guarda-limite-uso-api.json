@@ -1,0 +1,219 @@
+{
+  "name": "Guarda - Limite de Uso de API",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "nomeApi"
+            },
+            {
+              "name": "limiteDiario",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c1c89c48-79b9-43b1-a6c0-4dd6804e0ea7",
+      "name": "[GUARDA][N01] - Trigger Sub-workflow"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/app/sistema/uso-api.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "ce3ae049-6ed2-4ee2-bb81-51118c51ff85",
+      "name": "[GUARDA][N02] - Ler Contador do Dia",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        496,
+        -96
+      ],
+      "id": "6cfd9f55-78e0-4145-981d-3df27627ee89",
+      "name": "[GUARDA][N02b] - Ler Texto do Contador"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst nomeApi = $('[GUARDA][N01] - Trigger Sub-workflow').item.json.nomeApi;\nconst limiteDiario = $('[GUARDA][N01] - Trigger Sub-workflow').item.json.limiteDiario;\nconst hoje = new Date().toISOString().slice(0, 10);\n\nlet contadores = {};\nif (item.data) {\n  try { contadores = JSON.parse(item.data); } catch (e) { contadores = {}; }\n}\n\nif (!contadores[nomeApi] || contadores[nomeApi].data !== hoje) {\n  contadores[nomeApi] = { data: hoje, contagem: 0 };\n}\n\nlet permitido = false;\nif (contadores[nomeApi].contagem < limiteDiario) {\n  contadores[nomeApi].contagem += 1;\n  permitido = true;\n}\n\nreturn [{\n  json: {\n    permitido: permitido,\n    contagemAtual: contadores[nomeApi].contagem,\n    limiteDiario: limiteDiario,\n    nomeApi: nomeApi,\n    contadoresJson: JSON.stringify(contadores, null, 2)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        0
+      ],
+      "id": "697f354d-103c-4aae-9de1-2f02496679c0",
+      "name": "[GUARDA][N03] - Checar e Incrementar"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "contadoresJson",
+        "options": {
+          "encoding": "utf8"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ],
+      "id": "123bb6d4-60a6-4080-b878-cf4c0b5c0a81",
+      "name": "[GUARDA][N03b] - Converter Texto em Arquivo"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/data/app/sistema/uso-api.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "783d4041-aee2-46e3-982b-8bcffeac724f",
+      "name": "[GUARDA][N04] - Salvar Contador Atualizado"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "05cedaa5-e045-430f-bdba-9b620a8bf81c",
+              "name": "permitido",
+              "value": "={{ $('[GUARDA][N03] - Checar e Incrementar').item.json.permitido }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a8da0063-79c8-4eb4-9b27-bcfb609fc8fd",
+              "name": "contagemAtual",
+              "value": "={{ $('[GUARDA][N03] - Checar e Incrementar').item.json.contagemAtual }}",
+              "type": "number"
+            },
+            {
+              "id": "26601ea9-ee9f-4849-aa96-31f4a899ba7b",
+              "name": "limiteDiario",
+              "value": "={{ $('[GUARDA][N03] - Checar e Incrementar').item.json.limiteDiario }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1408,
+        0
+      ],
+      "id": "1d2e318f-4149-4725-afcf-557309845bfd",
+      "name": "[GUARDA][N05] - Retornar Resultado"
+    }
+  ],
+  "connections": {
+    "[GUARDA][N01] - Trigger Sub-workflow": {
+      "main": [
+        [
+          {
+            "node": "[GUARDA][N02] - Ler Contador do Dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[GUARDA][N02] - Ler Contador do Dia": {
+      "main": [
+        [
+          {
+            "node": "[GUARDA][N02b] - Ler Texto do Contador",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[GUARDA][N03] - Checar e Incrementar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[GUARDA][N02b] - Ler Texto do Contador": {
+      "main": [
+        [
+          {
+            "node": "[GUARDA][N03] - Checar e Incrementar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[GUARDA][N03] - Checar e Incrementar": {
+      "main": [
+        [
+          {
+            "node": "[GUARDA][N03b] - Converter Texto em Arquivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[GUARDA][N03b] - Converter Texto em Arquivo": {
+      "main": [
+        [
+          {
+            "node": "[GUARDA][N04] - Salvar Contador Atualizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[GUARDA][N04] - Salvar Contador Atualizado": {
+      "main": [
+        [
+          {
+            "node": "[GUARDA][N05] - Retornar Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

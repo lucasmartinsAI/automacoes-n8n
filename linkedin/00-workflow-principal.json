@@ -1,0 +1,1185 @@
+{
+  "name": "[LINKEDIN auto] WORKFLOW PRINCIPAL",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://trends.google.com/trending/rss?geo=BR",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -64,
+        -48
+      ],
+      "id": "912001a6-5f98-4891-9c6c-858ef43b4da4",
+      "name": "01. Pesquisador de Tendencias - Buscar Trends",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        160,
+        -48
+      ],
+      "id": "214f2418-c056-407d-b429-fdab77ed58a4",
+      "name": "01. Pesquisador de Tendencias - Converter XML"
+    },
+    {
+      "parameters": {
+        "jsCode": "const unwrap = (v) => Array.isArray(v) ? v[0] : v;\n\nconst input = $input.first().json;\nconst rss = unwrap(input.rss);\nconst channel = unwrap(rss.channel);\nlet items = channel.item || [];\nif (!Array.isArray(items)) items = [items];\n\nconst topics = items.slice(0, 10).map((it, idx) => {\n  const topicTitle = unwrap(it.title);\n  const traffic = unwrap(it['ht:approx_traffic']);\n  let newsItems = it['ht:news_item'] || [];\n  if (!Array.isArray(newsItems)) newsItems = [newsItems];\n\n  const articles = newsItems.slice(0, 3).map(n => ({\n    title: unwrap(n['ht:news_item_title']) || '',\n    url: unwrap(n['ht:news_item_url']) || '',\n    source: unwrap(n['ht:news_item_source']) || ''\n  })).filter(a => a.url);\n\n  return {\n    json: {\n      topicId: 'topic_' + idx,\n      topic: topicTitle,\n      traffic: traffic || '',\n      articles\n    }\n  };\n});\n\nreturn topics;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        -48
+      ],
+      "id": "1197569d-d941-4d77-8d4d-051c97a1ebf9",
+      "name": "01. Pesquisador de Tendencias - Extrair Topicos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\nfor (const item of $input.all()) {\n  const t = item.json;\n  (t.articles || []).forEach((a, i) => {\n    output.push({\n      json: {\n        topicId: t.topicId,\n        topic: t.topic,\n        traffic: t.traffic,\n        articleIndex: i,\n        title: a.title,\n        url: a.url,\n        source: a.source\n      }\n    });\n  });\n}\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        0
+      ],
+      "id": "c9790253-3973-46f5-8f32-598a5c54d5aa",
+      "name": "02. Apurador - Achatar Artigos"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "7246384c-c931-4350-bcfe-8e6895712666",
+      "name": "02. Apurador - Buscar Artigo",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('02. Apurador - Achatar Artigos').item.json;\nconst body = $json.data || '';\nconst statusCode = $json.statusCode;\nconst hasError = !!$json.error;\nconst stripped = String(body).replace(/<[^>]+>/g, ' ');\nconst tooShort = stripped.trim().length < 300;\nconst blockedHint = /enable javascript|access denied|403 forbidden|attention required|checking your browser|just a moment/i.test(body);\nconst needsJina = hasError || tooShort || blockedHint || (statusCode && statusCode >= 400);\n\nreturn {\n  json: {\n    topicId: origin.topicId,\n    topic: origin.topic,\n    traffic: origin.traffic,\n    url: origin.url,\n    title: origin.title,\n    source: origin.source,\n    rawHtml: body,\n    needsJinaFlag: needsJina ? 'sim' : 'nao'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "b5e41b72-7663-42a3-8e67-9f16e529f276",
+      "name": "02. Apurador - Detectar Bloqueio"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6a3c22da-ab8a-4505-9cc6-f3e499dbb44e",
+              "leftValue": "={{ $json.needsJinaFlag }}",
+              "rightValue": "sim",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "82ccb57a-f024-406f-b211-52d5f4e2ef87",
+      "name": "02. Apurador - Precisa Jina"
+    },
+    {
+      "parameters": {
+        "url": "=https://r.jina.ai/{{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        -64
+      ],
+      "id": "8737f898-78dc-4c20-a051-209632b1d48f",
+      "name": "02. Apurador - Jina Reader",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('02. Apurador - Detectar Bloqueio').item.json;\nconst text = $json.data || '';\nconst clean = String(text)\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 6000);\n\nreturn {\n  json: {\n    topicId: origin.topicId,\n    topic: origin.topic,\n    traffic: origin.traffic,\n    url: origin.url,\n    title: origin.title,\n    source: origin.source,\n    articleText: clean\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        -64
+      ],
+      "id": "ac9bc8b4-fefe-43b9-8a38-5776aa1fe069",
+      "name": "02. Apurador - Preparar Texto Jina"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const clean = String($json.rawHtml || '')\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 6000);\n\nreturn {\n  json: {\n    topicId: $json.topicId,\n    topic: $json.topic,\n    traffic: $json.traffic,\n    url: $json.url,\n    title: $json.title,\n    source: $json.source,\n    articleText: clean\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        96
+      ],
+      "id": "3810b1f4-98c4-4196-8419-ad0f1bf90980",
+      "name": "02. Apurador - Preparar Texto Direto"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2240,
+        0
+      ],
+      "id": "9586d1df-7b55-4c3e-b3ac-ad8a0dc1490f",
+      "name": "02. Apurador - Juntar Textos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const groups = {};\nfor (const item of $input.all()) {\n  const d = item.json;\n  if (!groups[d.topicId]) {\n    groups[d.topicId] = { topicId: d.topicId, topic: d.topic, traffic: d.traffic, articles: [] };\n  }\n  if (d.articleText && d.articleText.length > 100) {\n    groups[d.topicId].articles.push({ title: d.title, source: d.source, url: d.url, text: d.articleText });\n  }\n}\nreturn Object.values(groups)\n  .filter(g => g.articles.length > 0)\n  .map(g => ({ json: g }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        0
+      ],
+      "id": "4b5047a0-fdfc-40e2-a270-1982a8691262",
+      "name": "02. Apurador - Reagrupar por Topico"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const now = new Date();\nlet status = 'pendente';\nif ($json.compliance_status === 'bloqueado') status = 'bloqueado_compliance';\nelse if ($json.fact_check_status === 'divergencia') status = 'bloqueado_factcheck';\nelse if ($json.originalidade_alerta) status = 'alerta_originalidade';\n\nconst currentTopic = $json.topic;\nconst curadoriaItems = $('Redação (sub-workflow)').all();\nconst curadoriaMatch = curadoriaItems.find(item => item.json.topic === currentTopic);\nconst especialidadeEditoria = curadoriaMatch ? curadoriaMatch.json.especialidade_editoria : '';\nconst articles = curadoriaMatch ? (curadoriaMatch.json.articles || []) : [];\nconst fontes = articles.map(a => `${a.source} (${a.url})`).join('; ');\n\nreturn {\n  json: {\n    data: now.toISOString().slice(0, 10),\n    topico: $json.topic,\n    fontes: fontes,\n    post_final: $json.post_final,\n    hashtags: $json.hashtags,\n    status: status,\n    checklist: $json.checklist,\n    ajustes_feitos: $json.ajustes_feitos,\n    especialidade_editoria: especialidadeEditoria,\n    fact_check_status: $json.fact_check_status,\n    compliance_status: $json.compliance_status,\n    originalidade_score: $json.originalidade_score,\n    tem_cta: $json.cta_tipo,\n    imagem_url: $json.imagem_url || '',\n    horario_postado: '',\n    curtidas: '',\n    comentarios: '',\n    compartilhamentos: '',\n    cliente_sintetico_score: ''\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3792,
+        0
+      ],
+      "id": "a2efbf86-7f3b-418e-a9bf-85b58c0db5da",
+      "name": "00. Pipeline - Montar Linha Planilha"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Rascunhos",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "topico",
+              "displayName": "topico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fontes",
+              "displayName": "fontes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "post_final",
+              "displayName": "post_final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hashtags",
+              "displayName": "hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "checklist",
+              "displayName": "checklist",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ajustes_feitos",
+              "displayName": "ajustes_feitos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4000,
+        0
+      ],
+      "id": "d0fe7181-c12d-45d7-b6cf-fe4711ae8fe0",
+      "name": "00. Pipeline - Salvar na Planilha",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Sheets (configurar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -736,
+        128
+      ],
+      "id": "4d44831d-26c7-4a75-9f4c-4a0858546999",
+      "name": "DISPARO AUTOMATIZADO"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        -48
+      ],
+      "id": "9847cff5-03a2-44f2-b3a4-d3db40b5b6f5",
+      "name": "DISPARO MANUAL"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ID_DO_FLUXO_VERIFICACAO",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ID_DO_FLUXO_VERIFICACAO",
+          "cachedResultName": "[LINKEDIN AUTOMATION] Verificação - Compliance, Fact-check, Originalidade"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "post_final": "={{ $json.post_final }}",
+            "hashtags": "={{ $json.hashtags }}",
+            "resumo": "={{ $('Redação (sub-workflow)').all().find(item => item.json.topic === $json.topic)?.json.resumo }}",
+            "articles": "={{ $('Redação (sub-workflow)').all().find(item => item.json.topic === $json.topic)?.json.articles }}",
+            "checklist": "={{ $json.checklist }}",
+            "ajustes_feitos": "={{ $json.ajustes_feitos }}",
+            "cta_tipo": "={{ $json.cta_tipo }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "post_final",
+              "displayName": "post_final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "hashtags",
+              "displayName": "hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "resumo",
+              "displayName": "resumo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "articles",
+              "displayName": "articles",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "array",
+              "removed": false
+            },
+            {
+              "id": "checklist",
+              "displayName": "checklist",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ajustes_feitos",
+              "displayName": "ajustes_feitos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "cta_tipo",
+              "displayName": "cta_tipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3360,
+        0
+      ],
+      "id": "0a5d0f97-b141-4f5a-9d05-967318a066f1",
+      "name": "Verificação (sub-workflow)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ID_DO_FLUXO_DIRETOR_DE_ARTE",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ID_DO_FLUXO_DIRETOR_DE_ARTE",
+          "cachedResultName": "[LINKEDIN auto] Diretor de Arte - Geração de Imagem"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "post_final": "={{ $json.post_final }}",
+            "compliance_status": "={{ $json.compliance_status }}",
+            "fact_check_status": "={{ $json.fact_check_status }}",
+            "hashtags": "={{ $json.hashtags }}",
+            "resumo": "={{ $('Redação (sub-workflow)').all().find(item => item.json.topic === $json.topic)?.json.resumo }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "post_final",
+              "displayName": "post_final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "compliance_status",
+              "displayName": "compliance_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "fact_check_status",
+              "displayName": "fact_check_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "hashtags",
+              "displayName": "hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "resumo",
+              "displayName": "resumo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3584,
+        0
+      ],
+      "id": "a4ec8989-ad60-43d4-96e8-369cc4d0598f",
+      "name": "Diretor de Arte (sub-workflow)",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  { json: { rss_url: 'https://g1.globo.com/rss/g1/economia/' } },\n  { json: { rss_url: 'https://www.infomoney.com.br/feed/' } },\n  { json: { rss_url: 'https://monitordomercado.com.br/feed/' } },\n  { json: { rss_url: 'https://www.moneytimes.com.br/feed/' } },\n  { json: { rss_url: 'https://www.spacemoney.com.br/ultimas-noticias/feed/' } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        192
+      ],
+      "id": "6be7d6f1-9bd8-4b2c-b4ad-84817ed9c73d",
+      "name": "03. Fontes Economia - Lista RSS"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.rss_url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        64,
+        192
+      ],
+      "id": "e2fd13b0-1a56-4298-8945-3d695216f0ac",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        288,
+        192
+      ],
+      "id": "8e445cbd-1516-478b-a32a-8d76123632a1",
+      "name": "03. Fontes Economia - Converter"
+    },
+    {
+      "parameters": {
+        "jsCode": "const unwrap = (v) => Array.isArray(v) ? v[0] : v;\nconst allInputs = $input.all();\nconst topics = [];\nlet counter = 0;\n\nfor (const input of allInputs) {\n  const rss = unwrap(input.json.rss);\n  const channel = unwrap(rss.channel);\n  const fonte = unwrap(channel.title) || 'Economia';\n  let items = channel.item || [];\n  if (!Array.isArray(items)) items = [items];\n\n  items.slice(0, 10).forEach(it => {\n    const title = unwrap(it.title) || '';\n    const link = unwrap(it.link) || '';\n\n    if (!title || !link) return;\n\n    topics.push({\n      json: {\n        topicId: 'economia_' + counter++,\n        topic: title,\n        traffic: '',\n        articles: [\n          { title: title, url: link, source: fonte }\n        ]\n      }\n    });\n  });\n}\n\nreturn topics;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        192
+      ],
+      "id": "0b986e5b-f9d0-42f2-9b9e-ed35e490cdc9",
+      "name": "03. Fontes Economia - Extrair Topicos"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "f12eae5b-3c1e-48f5-b44f-fc62110a6b97",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ID_DO_FLUXO_CURADORIA",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ID_DO_FLUXO_CURADORIA",
+          "cachedResultName": "[LINKEDIN AUTOMATION] Curadoria - Editor de Pauta, Especialista de Editoria"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topicId": "={{ $json.topicId }}",
+            "topic": "={{ $json.topic }}",
+            "traffic": "={{ $json.traffic }}",
+            "articles": "={{ $json.articles }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "topicId",
+              "displayName": "topicId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "traffic",
+              "displayName": "traffic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "articles",
+              "displayName": "articles",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2688,
+        0
+      ],
+      "id": "f5569369-cec1-4723-9093-532f045fe536",
+      "name": "Curadoria sub-workflow)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ID_DO_FLUXO_REDACAO",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ID_DO_FLUXO_REDACAO",
+          "cachedResultName": "[LINKEDIN auto] Redação - Redator, Copydesk, SEO Growth"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "resumo": "={{ $json.resumo }}",
+            "angulo_sugerido": "={{ $json.angulo_sugerido }}",
+            "articles": "={{ $json.articles }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "resumo",
+              "displayName": "resumo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "angulo_sugerido",
+              "displayName": "angulo_sugerido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "articles",
+              "displayName": "articles",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "array",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3136,
+        0
+      ],
+      "id": "add62e92-bf6b-4c04-8fbf-99ff1a1c64e4",
+      "name": "Redação (sub-workflow)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ID_DO_FLUXO_APROVACAO",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ID_DO_FLUXO_APROVACAO",
+          "cachedResultName": "[LINKEDIN auto] APROVAÇÃO EMAIL"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        4224,
+        0
+      ],
+      "id": "75f12204-f9b9-4deb-8e80-0de5d879d74d",
+      "name": "Aprovação por email (subworkflow)"
+    },
+    {
+      "parameters": {
+        "jsCode": "function normalizarTopico(texto) {\n  let s = String(texto || '')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .toLowerCase()\n    .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  s = s.replace(/^(o|a|os|as|um|uma|uns|umas)\\s+/i, '');\n  return s;\n}\n\nconst items = $input.all();\n\nconst DIAS_HISTORICO = 5;\nconst hoje = new Date();\nconst limite = new Date(hoje.getTime() - DIAS_HISTORICO * 24 * 60 * 60 * 1000);\n\nconst historico = $('00. Apurador - Buscar Historico Recente').all();\nconst topicosHistoricos = new Set();\n\nfor (const h of historico) {\n  const dataStr = h.json.data;\n  const dataItem = dataStr ? new Date(dataStr) : null;\n  if (dataItem && dataItem >= limite) {\n    const chave = normalizarTopico(h.json.topico);\n    if (chave) topicosHistoricos.add(chave);\n  }\n}\n\nconst aprovados = items.filter(item => Number(item.json.nota) >= 70);\n\naprovados.sort((a, b) => (Number(b.json.nota) || 0) - (Number(a.json.nota) || 0));\n\nconst vistos = new Set();\nconst unicos = [];\n\nfor (const item of aprovados) {\n  const chave = normalizarTopico(item.json.topic);\n\n  if (!chave || vistos.has(chave) || topicosHistoricos.has(chave)) {\n    continue;\n  }\n\n  vistos.add(chave);\n  unicos.push({ json: { ...item.json } });\n}\n\nreturn unicos.slice(0, 3);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        0
+      ],
+      "id": "9ecae617-17ec-4570-9e9f-1dfa881e847b",
+      "name": "04. Editor de Pauta - Selecionar Top 3"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_ID_DA_PLANILHA",
+          "mode": "list",
+          "cachedResultName": "[LINKEDIN auto] PLANILHA GERAL",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rascunhos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/SEU_ID_DA_PLANILHA/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -512,
+        -48
+      ],
+      "id": "55447b23-9d21-4e8e-b26d-5171737947d4",
+      "name": "00. Apurador - Buscar Historico Recente",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURAR",
+          "name": "Google Sheets (configurar)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "01. Pesquisador de Tendencias - Buscar Trends": {
+      "main": [
+        [
+          {
+            "node": "01. Pesquisador de Tendencias - Converter XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01. Pesquisador de Tendencias - Converter XML": {
+      "main": [
+        [
+          {
+            "node": "01. Pesquisador de Tendencias - Extrair Topicos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01. Pesquisador de Tendencias - Extrair Topicos": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Achatar Artigos": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Buscar Artigo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Buscar Artigo": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Detectar Bloqueio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Detectar Bloqueio": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Precisa Jina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Precisa Jina": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Jina Reader",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "02. Apurador - Preparar Texto Direto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Jina Reader": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Preparar Texto Jina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Preparar Texto Jina": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Juntar Textos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Preparar Texto Direto": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Juntar Textos",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Juntar Textos": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Reagrupar por Topico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Apurador - Reagrupar por Topico": {
+      "main": [
+        [
+          {
+            "node": "Curadoria sub-workflow)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "00. Pipeline - Montar Linha Planilha": {
+      "main": [
+        [
+          {
+            "node": "00. Pipeline - Salvar na Planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DISPARO MANUAL": {
+      "main": [
+        [
+          {
+            "node": "00. Apurador - Buscar Historico Recente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificação (sub-workflow)": {
+      "main": [
+        [
+          {
+            "node": "Diretor de Arte (sub-workflow)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diretor de Arte (sub-workflow)": {
+      "main": [
+        [
+          {
+            "node": "00. Pipeline - Montar Linha Planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03. Fontes Economia - Lista RSS": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "03. Fontes Economia - Converter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03. Fontes Economia - Converter": {
+      "main": [
+        [
+          {
+            "node": "03. Fontes Economia - Extrair Topicos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03. Fontes Economia - Extrair Topicos": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "02. Apurador - Achatar Artigos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Curadoria sub-workflow)": {
+      "main": [
+        [
+          {
+            "node": "04. Editor de Pauta - Selecionar Top 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redação (sub-workflow)": {
+      "main": [
+        [
+          {
+            "node": "Verificação (sub-workflow)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "00. Pipeline - Salvar na Planilha": {
+      "main": [
+        [
+          {
+            "node": "Aprovação por email (subworkflow)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04. Editor de Pauta - Selecionar Top 3": {
+      "main": [
+        [
+          {
+            "node": "Redação (sub-workflow)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "00. Apurador - Buscar Historico Recente": {
+      "main": [
+        [
+          {
+            "node": "03. Fontes Economia - Lista RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

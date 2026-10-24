@@ -1,0 +1,256 @@
+{
+  "name": "[LINKEDIN auto] Verificação - Compliance, Fact-check, Originalidade",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "topic"
+            },
+            {
+              "name": "post_final"
+            },
+            {
+              "name": "hashtags"
+            },
+            {
+              "name": "resumo"
+            },
+            {
+              "name": "articles",
+              "type": "array"
+            },
+            {
+              "name": "checklist",
+              "type": "any"
+            },
+            {
+              "name": "ajustes_feitos"
+            },
+            {
+              "name": "cta_tipo"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b28f18ed-81e3-490c-925c-5c2ae53d97e8",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const trigger = $('When Executed by Another Workflow').item.json;\nconst post = trigger.post_final || '';\nconst hashtags = trigger.hashtags || '';\n\nconst systemPrompt = `Você é um analista de compliance regulatório especializado nas normas da CVM (Comissão de Valores Mobiliários) para assessores de investimento registrados no Brasil, com base na Resolução CVM nº 178/2023 (arts. 23 e 24) e nas regras de publicidade da CVM.\n\nO autor é assessor de investimentos de um escritório parceiro de uma corretora (intermediário). Posts que mencionam produtos/serviços específicos costumam fechar com \"Na [Escritório] | [Corretora] temos a solução certa para você\" — isso identifica o intermediário conforme exige o Art. 24 da Resolução CVM 178.\n\nResponda SOMENTE com um JSON no formato:\n{\"compliance_status\": \"aprovado\" ou \"bloqueado\", \"motivo\": \"explicação curta\", \"trechos_problematicos\": [\"trecho 1\", \"trecho 2\"]}\n\nBLOQUEIE o post se contiver qualquer um destes pontos:\n1. Promessa ou garantia de rentabilidade/retorno futuro. (Termos hedged como \"pode\", \"possível\", \"potencial\", \"projetado\" são aceitáveis; afirmações categóricas como \"vai render\", \"retorno garantido\", \"certeza de lucro\" não são.)\n2. Menção a rentabilidade passada de um ativo/produto sem disclaimer (que rentabilidade passada não garante retorno futuro).\n3. Recomendação ou menção a um produto/serviço financeiro específico (nome de fundo, ação, plano de previdência, etc) SEM a identificação do intermediário [Escritório] | [Corretora] em algum ponto do texto (Art. 24 da Resolução CVM 178 exige essa identificação nesses casos).\n4. Comparação de performance com concorrentes sem base auditável/comprovável.\n5. Conflito de interesse não declarado (ex: promoção de produto próprio ou de terceiro sem transparência).\n6. Tom sensacionalista, alarmista ou de urgência artificial (a CVM exige linguagem calma e moderada em comunicação pública).\n\nAPROVE o post se for conteúdo educacional/opinativo neutro: comentário sobre notícia, cenário macro, comportamento humano, gestão de risco ou tomada de decisão, SEM recomendar produto específico e SEM prometer retorno. Esse é o formato padrão usado por este assessor e está dentro do permitido — não seja excessivamente restritivo com esse tipo de conteúdo.`;\n\nconst userPrompt = `Texto do post:\\n\\n${post}\\n\\nHashtags: ${hashtags}`;\n\nreturn {\n  json: {\n    requestBody: {\n      model: 'deepseek-chat',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ],\n      temperature: 0.1\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "2bed6d63-9d9a-42a4-aefc-b428629806a7",
+      "name": "09. Compliance CVM - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "7924cfcb-7f36-45ab-9505-6727962144d0",
+      "name": "09. Compliance CVM - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    compliance_status: 'bloqueado',\n    motivo: 'Erro ao interpretar resposta da IA: ' + e.message,\n    trechos_problematicos: []\n  };\n}\n\nreturn {\n  json: {\n    compliance_status: parsed.compliance_status,\n    compliance_motivo: parsed.motivo,\n    compliance_trechos: (parsed.trechos_problematicos || []).join(' | ')\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "1cfbfaf0-9100-43b2-b2d3-40d87553238b",
+      "name": "09. Compliance CVM - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const trigger = $('When Executed by Another Workflow').item.json;\nconst post = trigger.post_final || '';\nconst resumoFatos = trigger.resumo || '';\n\nconst systemPrompt = `Você é um fact-checker seguindo os padrões do IFCN (International Fact-Checking Network) e da metodologia de agências como a Agência Lupa: verifica APENAS afirmações factuais verificáveis (eventos, datas, números, nomes, o que efetivamente aconteceu) — NUNCA checa opiniões, reflexões ou interpretações pessoais do autor.\n\nVocê vai comparar um post do LinkedIn com o resumo de fatos apurados que serviu de base para escrevê-lo.\n\nResponda SOMENTE com um JSON no formato:\n{\"fact_check_status\": \"ok\" ou \"divergencia\", \"motivo\": \"explicação curta\", \"afirmacoes_nao_verificadas\": [\"afirmação 1\", \"afirmação 2\"]}\n\nProcesso:\n1. Identifique no post SOMENTE as afirmações factuais sobre o evento noticiado (o que aconteceu, quando, com quem, números, datas, nomes). Ignore completamente frases de opinião, reflexão sobre risco/comportamento/decisão — essas não são checáveis e não devem aparecer em \"afirmacoes_nao_verificadas\".\n2. Para cada afirmação factual identificada, verifique se ela é sustentada pelo resumo de fatos apurados abaixo.\n3. Se todas as afirmações factuais forem sustentadas (ou se o post não contiver nenhuma afirmação factual verificável, só opinião), retorne \"ok\".\n4. Se alguma afirmação factual contradisser o resumo ou não tiver base nele (possível invenção/alucinação da IA em etapas anteriores), retorne \"divergencia\" e liste as afirmações problemáticas.`;\n\nconst userPrompt = `RESUMO DE FATOS APURADOS (fonte de verdade):\\n${resumoFatos}\\n\\nPOST A VERIFICAR:\\n${post}`;\n\nreturn {\n  json: {\n    requestBody: {\n      model: 'deepseek-chat',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ],\n      temperature: 0.1\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "1fa674c7-3f4b-407b-8550-019f5ca9f28d",
+      "name": "08. Fact-checker - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "f072ee89-1729-46e0-874d-5da00049b031",
+      "name": "08. Fact-checker - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    fact_check_status: 'divergencia',\n    motivo: 'Erro ao interpretar resposta da IA: ' + e.message,\n    afirmacoes_nao_verificadas: []\n  };\n}\n\nreturn {\n  json: {\n    fact_check_status: parsed.fact_check_status,\n    fact_check_motivo: parsed.motivo,\n    fact_check_afirmacoes: (parsed.afirmacoes_nao_verificadas || []).join(' | ')\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "f0112c6c-3b4d-424e-8d85-bdcc39ea2f1c",
+      "name": "08. Fact-checker - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const trigger = $('When Executed by Another Workflow').item.json;\nconst complianceResult = $('09. Compliance CVM - Parse Resposta').item.json;\nconst factCheckResult = $('08. Fact-checker - Parse Resposta').item.json;\n\nconst post = trigger.post_final || '';\nconst articles = trigger.articles || [];\nconst sourceText = articles.map(a => a.text || '').join(' ');\n\nfunction normalize(text) {\n  return text\n    .toLowerCase()\n    .replace(/[^\\wà-ú\\s]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .split(' ');\n}\n\nfunction getShingles(words, k) {\n  const shingles = new Set();\n  for (let i = 0; i <= words.length - k; i++) {\n    shingles.add(words.slice(i, i + k).join(' '));\n  }\n  return shingles;\n}\n\nfunction jaccardSimilarity(setA, setB) {\n  if (setA.size === 0 || setB.size === 0) return 0;\n  let intersection = 0;\n  for (const shingle of setA) {\n    if (setB.has(shingle)) intersection++;\n  }\n  const union = setA.size + setB.size - intersection;\n  return union === 0 ? 0 : intersection / union;\n}\n\nconst K = 5;\nconst postShingles = getShingles(normalize(post), K);\nconst sourceShingles = getShingles(normalize(sourceText), K);\nconst similarity = jaccardSimilarity(postShingles, sourceShingles);\nconst originalidadeScore = Math.round((1 - similarity) * 100);\n\nconst LIMIAR_BAIXA_ORIGINALIDADE = 70;\nconst originalidadeAlerta = originalidadeScore < LIMIAR_BAIXA_ORIGINALIDADE;\n\nreturn {\n  json: {\n    topic: trigger.topic,\n    post_final: trigger.post_final,\n    hashtags: trigger.hashtags,\n    checklist: trigger.checklist,\n    ajustes_feitos: trigger.ajustes_feitos,\n    cta_tipo: trigger.cta_tipo,\n    compliance_status: complianceResult.compliance_status,\n    compliance_motivo: complianceResult.compliance_motivo,\n    fact_check_status: factCheckResult.fact_check_status,\n    fact_check_motivo: factCheckResult.fact_check_motivo,\n    originalidade_score: originalidadeScore,\n    originalidade_alerta: originalidadeAlerta\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "704a378d-678c-4654-84c8-c049cc952851",
+      "name": "10. Verificador de Originalidade - Calcular Score"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "09. Compliance CVM - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09. Compliance CVM - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "09. Compliance CVM - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09. Compliance CVM - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "09. Compliance CVM - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09. Compliance CVM - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "08. Fact-checker - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08. Fact-checker - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "08. Fact-checker - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08. Fact-checker - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "08. Fact-checker - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08. Fact-checker - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "10. Verificador de Originalidade - Calcular Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

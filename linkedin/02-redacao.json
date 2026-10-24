@@ -1,0 +1,482 @@
+{
+  "name": "[LINKEDIN auto] Redação - Redator, Copydesk, SEO Growth",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "topic"
+            },
+            {
+              "name": "resumo"
+            },
+            {
+              "name": "angulo_sugerido"
+            },
+            {
+              "name": "articles",
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -128,
+        0
+      ],
+      "id": "ca0bfede-eb66-42b1-ba7e-230fa3b3ae84",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const userPrompt = `Rascunho a revisar:\\n\\n${$json.rascunho}\\n\\nFatos-base (nao pode contradizer): ${$json.resumo}`;\nconst systemPrompt = \"Voce e um copydesk editorial senior, seguindo o padrao dos 4 Cs de edicao (Clareza, Coerencia, Consistencia, Correcao). Revise o rascunho de post de LinkedIn abaixo nestas dimensoes: (1) Correcao - gramatica e ortografia em portugues do Brasil, e precisao factual (o texto nao pode afirmar nada que nao esteja nos fatos fornecidos), alem de garantir que ha mencao clara a fonte da noticia; (2) Clareza - o leitor precisa entender de primeira, sem ambiguidade; (3) Coerencia - o raciocinio do texto precisa fazer sentido do inicio ao fim, sem saltos logicos; (4) Consistencia - tom de voz de assessor de investimentos experiente, direto, sem jargao excessivo, confiavel, sem sensacionalismo, mantido do inicio ao fim. NAO se preocupe com SEO, hashtags ou gancho de abertura - isso e responsabilidade de outra etapa. NAO junte paragrafos curtos em um paragrafo maior - preserve as quebras de linha e o tamanho dos paragrafos do rascunho original, mesmo ao corrigir o texto dentro deles. NAO introduza transicoes didaticas do tipo 'a licao aqui e', 'isso nos ensina', 'para quem investe, isso significa' - se o rascunho ja evita esse padrao, mantenha evitando. Corrija o texto quando necessario e devolva a versao revisada. Responda SOMENTE em JSON valido, sem markdown, sem crases, no formato exato: {\\\"post_revisado\\\": \\\"...\\\", \\\"checklist\\\": {\\\"gramatica_ok\\\": true, \\\"fontes_citadas\\\": true, \\\"clareza_ok\\\": true, \\\"coerencia_ok\\\": true, \\\"tom_ok\\\": true}, \\\"ajustes_feitos\\\": \\\"...\\\"}\";\nreturn {\n  json: {\n    topic: $json.topic,\n    articles: $json.articles,\n    rascunho: $json.rascunho,\n    hashtags_rascunho: $json.hashtags_rascunho,\n    requestBody: {\n      model: 'deepseek-chat',\n      temperature: 0.3,\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ]\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "5376703b-5941-4a24-b81c-91daf35fee8e",
+      "name": "11. Copydesk - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        944,
+        0
+      ],
+      "id": "13f74ccd-a7c1-4cfc-a08a-581e53554f58",
+      "name": "11. Copydesk - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('11. Copydesk - Montar Prompt').item.json;\nconst raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    post_revisado: origin.rascunho,\n    checklist: { gramatica_ok: false, fontes_citadas: false, clareza_ok: false, coerencia_ok: false, tom_ok: false },\n    ajustes_feitos: 'Erro ao interpretar resposta da IA: ' + e.message\n  };\n}\n\nreturn {\n  json: {\n    topic: origin.topic,\n    articles: origin.articles,\n    post_revisado: parsed.post_revisado,\n    hashtags_rascunho: origin.hashtags_rascunho,\n    checklist_copydesk: parsed.checklist,\n    ajustes_copydesk: parsed.ajustes_feitos\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        0
+      ],
+      "id": "e1be7049-8317-4370-8844-fa48b51fc647",
+      "name": "11. Copydesk - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const post = $json.post_revisado || '';\nconst hashtagsBase = ($json.hashtags_rascunho || []).join(', ');\n\nconst systemPrompt = `Você é um especialista em growth e distribuição de conteúdo no LinkedIn, atualizado com o algoritmo de 2026. Fato central: o \"dwell time\" (tempo que a pessoa passa lendo o post) é hoje o principal sinal de qualidade do algoritmo - posts com 0-3s de leitura têm ~1,2% de engajamento, posts com 61s+ têm ~15,6% (13x mais). Hashtags perderam peso algorítmico - o LinkedIn hoje escaneia o TEXTO em busca de palavras-chave de contexto, hashtag não compensa texto fraco.\n\nSua tarefa, com o post já revisado abaixo:\n1. Garanta que as primeiras 1-2 linhas (até ~210 caracteres, antes do corte \"ver mais\") tenham um gancho forte que prenda atenção e dê vontade de continuar lendo - reescreva a abertura se necessário, sem inventar fatos novos.\n2. Garanta que o texto tenha palavras-chave de contexto relevantes ao tema naturalmente incorporadas (não força artificial, apenas garanta que o vocabulário principal do tema apareça no corpo do texto).\n3. Estruture em parágrafos curtos e escaneáveis (LinkedIn favorece leitura fácil no mobile).\n4. Sugira de 3 a 5 hashtags relevantes e específicas ao tema (nunca genéricas como #investimentos sozinho, combine com termos mais específicos do assunto).\n\nNÃO mude fatos, não adicione informação nova, não mexa no tom já definido pelo copydesk - só otimize estrutura/abertura/hashtags. Responda SOMENTE em JSON válido, sem markdown, sem crases, no formato exato: {\"post_final\": \"...\", \"hashtags\": [\"...\", \"...\"], \"ajustes_seo\": \"...\"}`;\n\nconst userPrompt = `Post revisado pelo copydesk:\\n\\n${post}\\n\\nHashtags sugeridas anteriormente (só como referência, pode substituir): ${hashtagsBase}`;\n\nreturn {\n  json: {\n    ...$json,\n    requestBody: {\n      model: 'deepseek-chat',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ],\n      temperature: 0.4\n    }\n  }\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "07630d24-22ca-46ba-a752-de602a2b79f0",
+      "name": "12. SEO Growth - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1616,
+        0
+      ],
+      "id": "acdce9ad-52f4-471e-8046-568dbee0eda6",
+      "name": "12. SEO Growth - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('12. SEO Growth - Montar Prompt').item.json;\nconst raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    post_final: origin.post_revisado,\n    hashtags: origin.hashtags_rascunho || [],\n    ajustes_seo: 'Erro ao interpretar resposta da IA: ' + e.message\n  };\n}\n\nreturn {\n  json: {\n    topic: origin.topic,\n    articles: origin.articles,\n    post_final: parsed.post_final,\n    hashtags: (parsed.hashtags || []).join(' '),\n    checklist: {\n      ...(origin.checklist_copydesk || {}),\n      seo_ok: true\n    },\n    ajustes_feitos: [origin.ajustes_copydesk, parsed.ajustes_seo].filter(Boolean).join(' | ')\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        0
+      ],
+      "id": "3d2b686e-ea1f-4e61-8e96-277d73a40ce8",
+      "name": "12. SEO Growth - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fontes = ($json.articles || []).map(a => `${a.source} (${a.url})`).join('; ');\nconst userPrompt = `Topico: ${$json.topic}\\nResumo dos fatos: ${$json.resumo}\\nAngulo sugerido: ${$json.angulo_sugerido}\\nFontes disponiveis: ${fontes}`;\nconst systemPrompt = \"Voce e um assessor de investimentos escrevendo um post de LinkedIn como se fosse sua propria analise pessoal de um fato do dia - nao como um ghostwriter reportando uma noticia e depois explicando o que ela significa. ESTRUTURA OBRIGATORIA: a primeira frase do post tem que ser em primeira pessoa, estabelecendo que isso e uma leitura/opiniao sua sobre algo que chamou sua atencao - NUNCA comece narrando o fato em terceira pessoa. Exemplos de abertura (nao copie, use so como referencia de tom): 'Uma coisa me chamou atencao essa semana:', 'Prefiro olhar para [tema] com uma pergunta simples:', 'Nao e todo dia que um fato de [setor] me faz repensar [conceito], mas essa semana foi assim:', 'Tem um detalhe nessa noticia que pouca gente comentou, e que pra mim e o mais importante:'. A partir dessa abertura pessoal, o restante do texto continua na MESMA voz - o fato (com fonte citada naturalmente, tipo 'segundo o G1...') entra como evidencia dentro do seu proprio raciocinio, nunca como um bloco de noticia separado que vem antes da opiniao. NUNCA existe uma frase que anuncia a transicao entre fato e analise (tipo 'para quem investe', 'o que isso significa', 'a licao aqui e', 'isso nos ensina') - se voce sente que precisa de uma frase assim pra conectar as duas partes, reescreva o texto inteiro pra nao ter duas partes, e sim uma linha de raciocinio continua desde a primeira frase. Conecte com gestao de risco, decisao sob incerteza e comportamento humano aplicado a investimentos - SEM citar jogos de azar ou qualquer analogia explicita a jogo. Nunca use morte, desastre ou tragedia como gancho. Termine com UMA UNICA reflexao ou pergunta pessoal genuina (nunca duas, nunca generica tipo 'e voce, ja revisou seu portfolio'). Tenha entre 900 e 1300 caracteres. Use paragrafos CURTOS, no maximo 4 a 6 linhas cada, com linha em branco entre eles. Nao invente dados. Responda SOMENTE em JSON valido, sem markdown, sem crases, no formato exato: {\\\"post\\\": \\\"...\\\", \\\"hook\\\": \\\"...\\\", \\\"hashtags\\\": [\\\"...\\\", \\\"...\\\"]}\";\nreturn {\n  json: {\n    topic: $json.topic,\n    articles: $json.articles,\n    resumo: $json.resumo,\n    requestBody: {\n      model: 'deepseek-chat',\n      temperature: 0.5,\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ]\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        0
+      ],
+      "id": "5d1450c4-9d62-497d-859c-e1f6131b6204",
+      "name": "07. Redator - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('07. Redator - Montar Prompt').item.json;\nlet content = ($json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content) || '{}';\ncontent = content.trim().replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```$/, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(content); } catch (e) { parsed = { post: '', hook: '', hashtags: [] }; }\nreturn {\n  json: {\n    topic: origin.topic,\n    articles: origin.articles,\n    resumo: origin.resumo,\n    rascunho: parsed.post || '',\n    hook: parsed.hook || '',\n    hashtags_rascunho: parsed.hashtags || []\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        0
+      ],
+      "id": "de3a42da-f2b4-4997-805b-6f23fa027206",
+      "name": "07. Redator - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const post = $json.post_final || '';\nconst topic = $json.topic || '';\n\nconst systemPrompt = `Você é um estrategista de conteúdo especializado em calls-to-action (CTAs) para LinkedIn, com base no framework de funil de marketing TOFU/MOFU/BOFU e na regra prática de proporção de conteúdo 4:1:1 (a cada 6 posts: 4 de puro valor sem venda, 1 com menção leve, 1 com venda direta).\n\nCONTEXTO IMPORTANTE: este post nasce de um tópico em alta no Google Trends - é conteúdo automatizado de TOPO DE FUNIL (TOFU), alcançando uma audiência fria/mista que não abriu o LinkedIn pensando em contratar um assessor de investimentos. Nessa etapa, CTA de venda ou mesmo convite a contato tende a soar deslocado e cansar quem segue o perfil se aparecer toda hora.\n\nO autor é assessor de investimentos (CVM Resolução 178/2023) e já tem por princípio próprio nunca citar produto/marca específica em conteúdo público, preferindo vender o racional por trás da estratégia. Qualquer CTA usado NÃO PODE: prometer ou insinuar retorno financeiro; recomendar produto ou serviço específico; criar urgência artificial; soar como venda direta não solicitada.\n\nSua tarefa: ler o post finalizado abaixo e escolher UMA das três opções de fechamento, sendo a primeira a escolha padrão/mais comum:\n\n1. \"sem_cta\" (escolha padrão, use na GRANDE maioria dos casos): não adicionar nenhum CTA. O post termina com o próprio fechamento que já tem, sem pedir nada ao leitor. cta_texto deve vir como string vazia \"\".\n\n2. \"reflexao_comentario\" (use ocasionalmente, quando o tema realmente convida a uma opinião): uma pergunta ou provocação curta que convida o leitor a comentar sua visão/experiência sobre o tema. Não menciona negócio, não convida contato direto.\n\n3. \"convite_leve\" (use raramente, só quando o tema se conectar de forma muito natural e forte com planejamento financeiro/patrimonial pessoal - não force): um convite suave a trocar uma ideia ou tirar dúvidas em DM/comentário, sem citar produto, sem prazo, sem promessa.\n\nResponda SOMENTE em JSON válido, sem markdown, sem crases, no formato exato: {\"cta_tipo\": \"sem_cta\" ou \"reflexao_comentario\" ou \"convite_leve\", \"cta_texto\": \"...\", \"justificativa\": \"...\"}`;\n\nconst userPrompt = `Tópico: ${topic}\\n\\nPost finalizado:\\n${post}`;\n\nreturn {\n  json: {\n    ...$json,\n    requestBody: {\n      model: 'deepseek-chat',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ],\n      temperature: 0.5\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        0
+      ],
+      "id": "336797f2-0e86-460b-a4b5-634f6648a4ab",
+      "name": "13. CTA Estratégico - Montar Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2256,
+        0
+      ],
+      "id": "461242f6-f733-4ac3-bced-b084e08c1edd",
+      "name": "13. CTA Estratégico - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const origin = $('13. CTA Estratégico - Montar Prompt').item.json;\nconst raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    cta_tipo: 'sem_cta',\n    cta_texto: '',\n    justificativa: 'Erro ao interpretar resposta da IA: ' + e.message\n  };\n}\n\nconst postComCta = parsed.cta_texto\n  ? `${origin.post_final}\\n\\n${parsed.cta_texto}`\n  : origin.post_final;\n\nreturn {\n  json: {\n    topic: origin.topic,\n    articles: origin.articles,\n    post_final: postComCta,\n    hashtags: origin.hashtags,\n    checklist: origin.checklist,\n    ajustes_feitos: origin.ajustes_feitos,\n    cta_tipo: parsed.cta_tipo,\n    cta_justificativa: parsed.justificativa\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        0
+      ],
+      "id": "e486b338-1d1c-44b7-89ad-2488a0f660eb",
+      "name": "13. CTA Estratégico - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2864,
+        0
+      ],
+      "id": "98fb78b4-d818-4cf1-9771-4fdc41e0327f",
+      "name": "15. Guardião da Voz - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const origin = $('15. Guardião da Voz - Montar Prompt').item.json;\nconst raw = $json.choices[0].message.content;\n\nlet parsed;\ntry {\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    post_ajustado: origin.post_final,\n    precisou_ajuste: false,\n    nota_voz: 'Erro ao interpretar resposta da IA: ' + e.message\n  };\n}\n\nreturn {\n  json: {\n    topic: origin.topic,\n    articles: origin.articles,\n    post_final: parsed.post_ajustado || origin.post_final,\n    hashtags: origin.hashtags,\n    checklist: origin.checklist,\n    ajustes_feitos: [origin.ajustes_feitos, parsed.nota_voz].filter(Boolean).join(' | '),\n    cta_tipo: origin.cta_tipo\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3088,
+        0
+      ],
+      "id": "68ffb495-dab5-4ce2-98ea-5d46f5a5d633",
+      "name": "15. Guardião da Voz - Parse Resposta"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        304,
+        0
+      ],
+      "id": "8f3ee85b-4022-4f3c-8e3b-3ce1fcbdde85",
+      "name": "07. Redator - Chamada IA",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR",
+          "name": "DeepSeek API (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const post = $json.post_final || '';\n\nconst systemPrompt = `Você é o \"Guardião da Voz\" de o autor, assessor de investimentos de um escritório parceiro de uma corretora. Seu trabalho é revisar o post final e garantir que ele soe genuinamente com a voz dele, não com uma voz corporativa genérica de IA.\n\nPerfil de voz do autor (validado por ele mesmo): é direto e objetivo, vai direto ao ponto - mas directness pra ele NÃO significa ser frio ou seco, existe um jeito certo de falar. Ele é brincalhão, usa muita ironia e MUITA analogia - é seu traço mais forte, usado pra aproximar quem lê e simplificar conceitos difíceis com exemplos do dia a dia. Nunca cita marca ou produto financeiro específico em conteúdo público - prefere falar do racional/estratégia por trás. Sustenta toda afirmação com dado real já apurado, nunca com frase vaga ou promessa de retorno. Gosta de um toque de bastidor/genuíno (nunca inventado) que deixe o conteúdo mais próximo do que institucional.\n\nRevise o post abaixo com esse filtro:\n1. Está muito robótico ou genérico, sem nenhuma leveza ou analogia? Se sim, adicione UMA analogia natural e simples que ilustre o ponto central, sem forçar.\n2. Está muito frio ou distante? Ajuste o tom pra soar mais próximo, mantendo a objetividade.\n3. Tem jargão desnecessário que um leitor comum não entenderia? Simplifique.\n4. NÃO mude nenhum fato, dado, fonte, número ou o CTA no final - só ajuste tom e estilo do texto.\n5. Se o post já soa alinhado com essa voz, não mexe, devolve exatamente igual.\n\nResponda SOMENTE em JSON válido, sem markdown, sem crases, no formato exato: {\"post_ajustado\": \"...\", \"precisou_ajuste\": true ou false, \"nota_voz\": \"...\"}`;\n\nconst userPrompt = `Post final a revisar:\\n\\n${post}`;\n\nreturn {\n  json: {\n    ...$json,\n    requestBody: {\n      model: 'deepseek-chat',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userPrompt }\n      ],\n      temperature: 0.4\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        0
+      ],
+      "id": "290624c5-954f-4f33-8279-501e1262538b",
+      "name": "15. Guardião da Voz - Montar Prompt"
+    }
+  ],
+  "connections": {
+    "11. Copydesk - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "11. Copydesk - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Copydesk - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "11. Copydesk - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Copydesk - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "12. SEO Growth - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. SEO Growth - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "12. SEO Growth - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. SEO Growth - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "12. SEO Growth - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "07. Redator - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07. Redator - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "07. Redator - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07. Redator - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "11. Copydesk - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. SEO Growth - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "13. CTA Estratégico - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. CTA Estratégico - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "13. CTA Estratégico - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. CTA Estratégico - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "13. CTA Estratégico - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. CTA Estratégico - Parse Resposta": {
+      "main": [
+        [
+          {
+            "node": "15. Guardião da Voz - Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15. Guardião da Voz - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "15. Guardião da Voz - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07. Redator - Chamada IA": {
+      "main": [
+        [
+          {
+            "node": "07. Redator - Parse Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15. Guardião da Voz - Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "15. Guardião da Voz - Chamada IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}
